@@ -22,7 +22,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'eval'))
 sys.path.append(os.path.join(os.path.dirname(__file__), 'symbols'))
 import fresnet
 import finception_resnet_v2
-import fmobilenet 
+import fmobilenet
 import fmobilenetv2
 import fxception
 import fdensenet
@@ -194,30 +194,30 @@ def get_symbol(args, arg_params, aux_params):
   margin_symbols = []
   if args.network[0]=='d':
     embedding = fdensenet.get_symbol(args.emb_size, args.num_layers,
-        version_se=args.version_se, version_input=args.version_input, 
+        version_se=args.version_se, version_input=args.version_input,
         version_output=args.version_output, version_unit=args.version_unit)
   elif args.network[0]=='m':
     print('init mobilenet', args.num_layers)
     if args.num_layers==1:
-      embedding = fmobilenet.get_symbol(args.emb_size, 
-          version_se=args.version_se, version_input=args.version_input, 
+      embedding = fmobilenet.get_symbol(args.emb_size,
+          version_se=args.version_se, version_input=args.version_input,
           version_output=args.version_output, version_unit=args.version_unit)
     else:
       embedding = fmobilenetv2.get_symbol(args.emb_size)
   elif args.network[0]=='i':
     print('init inception-resnet-v2', args.num_layers)
     embedding = finception_resnet_v2.get_symbol(args.emb_size,
-        version_se=args.version_se, version_input=args.version_input, 
+        version_se=args.version_se, version_input=args.version_input,
         version_output=args.version_output, version_unit=args.version_unit)
   elif args.network[0]=='x':
     print('init xception', args.num_layers)
     embedding = fxception.get_symbol(args.emb_size,
-        version_se=args.version_se, version_input=args.version_input, 
+        version_se=args.version_se, version_input=args.version_input,
         version_output=args.version_output, version_unit=args.version_unit)
   elif args.network[0]=='p':
     print('init dpn', args.num_layers)
     embedding = fdpn.get_symbol(args.emb_size, args.num_layers,
-        version_se=args.version_se, version_input=args.version_input, 
+        version_se=args.version_se, version_input=args.version_input,
         version_output=args.version_output, version_unit=args.version_unit)
   elif args.network[0]=='n':
     print('init nasnet', args.num_layers)
@@ -227,8 +227,8 @@ def get_symbol(args, arg_params, aux_params):
     embedding = spherenet.get_symbol(args.emb_size, args.num_layers)
   else:
     print('init resnet', args.num_layers)
-    embedding = fresnet.get_symbol(args.emb_size, args.num_layers, 
-        version_se=args.version_se, version_input=args.version_input, 
+    embedding = fresnet.get_symbol(args.emb_size, args.num_layers,
+        version_se=args.version_se, version_input=args.version_input,
         version_output=args.version_output, version_unit=args.version_unit)
   all_label = mx.symbol.Variable('softmax_label')
   if not args.output_c2c:
@@ -1023,8 +1023,8 @@ def train_net(args):
       if args.max_steps>0 and mbatch>args.max_steps:
         sys.exit(0)
 
-    #epoch_cb = mx.callback.do_checkpoint(prefix, 1)
-    epoch_cb = None
+    epoch_cb = mx.callback.do_checkpoint(prefix, 1)
+    #epoch_cb = None
 
 
 
@@ -1054,4 +1054,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

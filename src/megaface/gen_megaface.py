@@ -26,10 +26,11 @@ from sklearn.preprocessing import normalize
 import mxnet as mx
 from mxnet import ndarray as nd
 #from caffe.proto import caffe_pb2
+import keras
 
-megaface_out = '/raid5data/dplearn/megaface/MegaFace_Features'
+megaface_out = '/host/matroid/data/megaface/challenge1/MegaFace_kerasretina50_Features' # '/raid5data/dplearn/megaface/MegaFace_Features'
 #facescrub_out = '/raid5data/dplearn/megaface/FaceScrubSubset_Features'
-facescrub_out = '/raid5data/dplearn/megaface/FaceScrub_Features'
+facescrub_out = '/host/matroid/data/megaface/challenge1/FaceScrub_kerasresnet50_Features' # '/raid5data/dplearn/megaface/FaceScrub_Features'
 
 
 def do_flip(data):
@@ -70,10 +71,14 @@ def get_feature(image_path, bbox, landmark, nets, image_shape, use_align, aligne
       #nimg[:,ppatch[1]:ppatch[3],ppatch[0]:ppatch[2]] = _img[:, ppatch[1]:ppatch[3], ppatch[0]:ppatch[2]]
       #_img = nimg
       input_blob = np.expand_dims(_img, axis=0)
-      data = mx.nd.array(input_blob)
-      db = mx.io.DataBatch(data=(data,))
-      net.model.forward(db, is_train=False)
-      _embedding = net.model.get_outputs()[0].asnumpy().flatten()
+      if net.__class__.__name__ == 'Model': # keras
+        channel_last = np.transpose(input_blob, (0, 2, 3, 1))
+        _embedding = net.predict(channel_last).flatten()
+      else:
+        data = mx.nd.array(input_blob)
+        db = mx.io.DataBatch(data=(data,))
+        net.model.forward(db, is_train=False)
+        _embedding = net.model.get_outputs()[0].asnumpy().flatten()
       #print(_embedding.shape)
       if embedding is None:
         embedding = _embedding
@@ -105,32 +110,36 @@ def main(args):
   ctx = mx.gpu(gpuid)
   nets = []
   image_shape = [int(x) for x in args.image_size.split(',')]
-  for model in args.model.split('|'):
-    vec = model.split(',')
-    assert len(vec)>1
-    prefix = vec[0]
-    epoch = int(vec[1])
-    print('loading',prefix, epoch)
-    net = edict()
-    net.ctx = ctx
-    net.sym, net.arg_params, net.aux_params = mx.model.load_checkpoint(prefix, epoch)
-    #net.arg_params, net.aux_params = ch_dev(net.arg_params, net.aux_params, net.ctx)
-    all_layers = net.sym.get_internals()
-    net.sym = all_layers['fc1_output']
-    net.model = mx.mod.Module(symbol=net.sym, context=net.ctx, label_names = None)
-    net.model.bind(data_shapes=[('data', (1, 3, image_shape[1], image_shape[2]))])
-    net.model.set_params(net.arg_params, net.aux_params)
-    #_pp = prefix.rfind('p')+1
-    #_pp = prefix[_pp:]
-    #net.patch = [int(x) for x in _pp.split('_')]
-    #assert len(net.patch)==5
-    #print('patch', net.patch)
-    nets.append(net)
+  if args.model:
+    for model in args.model.split('|'):
+      vec = model.split(',')
+      assert len(vec)>1
+      prefix = vec[0]
+      epoch = int(vec[1])
+      print('loading',prefix, epoch)
+      net = edict()
+      net.ctx = ctx
+      net.sym, net.arg_params, net.aux_params = mx.model.load_checkpoint(prefix, epoch)
+      #net.arg_params, net.aux_params = ch_dev(net.arg_params, net.aux_params, net.ctx)
+      all_layers = net.sym.get_internals()
+      net.sym = all_layers['fc1_output']
+      net.model = mx.mod.Module(symbol=net.sym, context=net.ctx, label_names = None)
+      net.model.bind(data_shapes=[('data', (1, 3, image_shape[1], image_shape[2]))])
+      net.model.set_params(net.arg_params, net.aux_params)
+      #_pp = prefix.rfind('p')+1
+      #_pp = prefix[_pp:]
+      #net.patch = [int(x) for x in _pp.split('_')]
+      #assert len(net.patch)==5
+      #print('patch', net.patch)
+      nets.append(net)
+  elif args.keras_model:
+    nets.append(keras.models.load_model(args.keras_model))
+
 
   #megaface_lst = "/raid5data/dplearn/faceinsight_align_megaface.lst"
-  megaface_lst = "/raid5data/dplearn/megaface/megaface_mtcnn_112x112/lst"
+  megaface_lst = '/host/matroid/data/megaface/challenge1/megaface_my_aligned/lst' # "/raid5data/dplearn/megaface/megaface_mtcnn_112x112/lst"
   #facescrub_lst = "/raid5data/dplearn/faceinsight_align_facescrub.lst"
-  facescrub_lst = "/raid5data/dplearn/megaface/facescrubr/small_lst"
+  facescrub_lst = '/host/matroid/data/megaface/facescrub/myoutput/lst' # "/raid5data/dplearn/megaface/facescrubr/small_lst"
   if args.fsall>0:
     facescrub_lst = "/raid5data/dplearn/megaface/facescrubr/lst"
 
@@ -212,7 +221,7 @@ def main(args):
 
 def parse_arguments(argv):
   parser = argparse.ArgumentParser()
-  
+
   parser.add_argument('--batch_size', type=int, help='', default=100)
   parser.add_argument('--image_size', type=str, help='', default='3,112,112')
   parser.add_argument('--gpu', type=int, help='', default=0)
@@ -228,9 +237,9 @@ def parse_arguments(argv):
   #parser.add_argument('--model', type=str, help='', default='../model/sphereface-s60-p0_0_96_112_0,31|../model/sphereface-s60-p0_0_96_95_0,21|../model/sphereface2-s60-p0_0_96_112_0,21|../model/sphereface3-s60-p0_0_96_95_0,23|../model/sphereface-20-p0_0_96_112_0,22|../model/sphereface-20-p0_0_96_95_0,21|../model/sphereface-20-p0_0_80_95_0,21')
   #parser.add_argument('--model', type=str, help='', default='../model/spherefacei-s60-p0_0_96_112_0,135')
   #parser.add_argument('--model', type=str, help='', default='../model/spherefacei-s60-p0_0_96_95_0,95')
-  parser.add_argument('--model', type=str, help='', default='../model/spherefacei-s60-p0_15_96_112_0,95')
+  parser.add_argument('--model', type=str, help='')
+  parser.add_argument('--keras_model', type=str, help='')
   return parser.parse_args(argv)
 
 if __name__ == '__main__':
   main(parse_arguments(sys.argv[1:]))
-

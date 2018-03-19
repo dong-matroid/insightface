@@ -12,4 +12,3 @@ mkdir -p "$MODELDIR"
 PREFIX="$MODELDIR/model"
 LOGFILE="$MODELDIR/log"
 CUDA_VISIBLE_DEVICES='0,1,2,3' python -u train_softmax.py --data-dir $DATA_DIR --network "$NETWORK" --loss-type 0 --prefix "$PREFIX" --per-batch-size 128 > "$LOGFILE" 2>&1 &
-

@@ -97,16 +97,16 @@ def main(args):
       valid_key[key] = 1
       #print(key)
     print('valid keys', len(valid_key))
-    
+
     print('Creating networks and loading parameters')
-    
+
     with tf.Graph().as_default():
         #gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=args.gpu_memory_fraction)
         #sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options, log_device_placement=False))
         sess = tf.Session()
         with sess.as_default():
             pnet, rnet, onet = detect_face.create_mtcnn(sess, None)
-    
+
     minsize = 100 # minimum size of face
     threshold = [ 0.6, 0.7, 0.7 ]  # three steps's threshold
     factor = 0.709 # scale factor
@@ -129,8 +129,8 @@ def main(args):
       os.makedirs(args.output_dir)
 
     output_filename = os.path.join(args.output_dir, 'lst')
-    
-    
+
+
     with open(output_filename, "w") as text_file:
         nrof_images_total = 0
         nrof = np.zeros( (5,), dtype=np.int32)
@@ -150,6 +150,8 @@ def main(args):
             print(fimage.image_path)
             a,b = _paths[-2], _paths[-1]
             pb = b.rfind('.')
+            if b[pb+1] in [' ', '_']:
+              pb = len(b)
             bname = b[0:pb]
             pb = bname.rfind('_')
             body = bname[(pb+1):]
@@ -271,11 +273,11 @@ def main(args):
                 cv2.imwrite(target_file, bgr)
                 oline = '%d\t%s\t%d\n' % (1,target_file, int(fimage.classname))
                 text_file.write(oline)
-                            
+
 
 def parse_arguments(argv):
     parser = argparse.ArgumentParser()
-    
+
     parser.add_argument('--input-dir', type=str, help='Directory with unaligned images.')
     parser.add_argument('--output-dir', type=str, help='Directory with aligned face thumbnails.')
     #parser.add_argument('--image_size', type=int,
@@ -286,4 +288,3 @@ def parse_arguments(argv):
 
 if __name__ == '__main__':
     main(parse_arguments(sys.argv[1:]))
-

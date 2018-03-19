@@ -2,6 +2,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import time
 from scipy import misc
 import sys
 import os
@@ -19,7 +20,7 @@ from mtcnn_detector import MtcnnDetector
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src', 'common'))
 import face_image
 import face_preprocess
-
+import keras
 
 def do_flip(data):
   for idx in xrange(data.shape[0]):
@@ -38,22 +39,28 @@ class FaceModel:
     assert len(_vec)==2
     image_size = (int(_vec[0]), int(_vec[1]))
     self.image_size = image_size
-    _vec = args.model.split(',')
-    assert len(_vec)==2
-    prefix = _vec[0]
-    epoch = int(_vec[1])
-    print('loading',prefix, epoch)
     ctx = mx.gpu(args.gpu)
-    sym, arg_params, aux_params = mx.model.load_checkpoint(prefix, epoch)
-    all_layers = sym.get_internals()
-    sym = all_layers['fc1_output']
-    model = mx.mod.Module(symbol=sym, context=ctx, label_names = None)
-    #model.bind(data_shapes=[('data', (args.batch_size, 3, image_size[0], image_size[1]))], label_shapes=[('softmax_label', (args.batch_size,))])
-    model.bind(data_shapes=[('data', (1, 3, image_size[0], image_size[1]))])
-    model.set_params(arg_params, aux_params)
-    self.model = model
+    if args.model:
+      _vec = args.model.split(',')
+      assert len(_vec)==2
+      prefix = _vec[0]
+      epoch = int(_vec[1])
+      print('loading',prefix, epoch)
+      sym, arg_params, aux_params = mx.model.load_checkpoint(prefix, epoch)
+      all_layers = sym.get_internals()
+      sym = all_layers['fc1_output']
+      model = mx.mod.Module(symbol=sym, context=ctx, label_names = None)
+      #model.bind(data_shapes=[('data', (args.batch_size, 3, image_size[0], image_size[1]))], label_shapes=[('softmax_label', (args.batch_size,))])
+      model.bind(data_shapes=[('data', (1, 3, image_size[0], image_size[1]))])
+      model.set_params(arg_params, aux_params)
+      self.model = model
+      self.keras = False
+    elif args.keras_model:
+      self.model = keras.models.load_model(args.keras_model)
+      self.keras = True
+
     mtcnn_path = os.path.join(os.path.dirname(__file__), 'mtcnn-model')
-    detector = MtcnnDetector(model_folder=mtcnn_path, ctx=ctx, num_worker=1, accurate_landmark = True, threshold=[0.0,0.0,0.2])
+    detector = MtcnnDetector(model_folder=mtcnn_path, ctx=ctx, num_worker=1, accurate_landmark = True, threshold=[0.0,0.0,0.1])
     self.detector = detector
 
 
@@ -70,6 +77,7 @@ class FaceModel:
     #print(bbox)
     #print(points)
     nimg = face_preprocess.preprocess(face_img, bbox, points, image_size='112,112')
+    cv2.imwrite('/tmp/face%s.jpg' % time.time(), nimg)
     nimg = cv2.cvtColor(nimg, cv2.COLOR_BGR2RGB)
     aligned = np.transpose(nimg, (2,0,1))
     #print(nimg.shape)
@@ -80,10 +88,14 @@ class FaceModel:
           break
         do_flip(aligned)
       input_blob = np.expand_dims(aligned, axis=0)
-      data = mx.nd.array(input_blob)
-      db = mx.io.DataBatch(data=(data,))
-      self.model.forward(db, is_train=False)
-      _embedding = self.model.get_outputs()[0].asnumpy()
+      if self.keras:
+        channel_last = np.transpose(input_blob, (0, 2, 3, 1))
+        _embedding = self.model.predict(channel_last)
+      else:
+        data = mx.nd.array(input_blob)
+        db = mx.io.DataBatch(data=(data,))
+        self.model.forward(db, is_train=False)
+        _embedding = self.model.get_outputs()[0].asnumpy()
       #print(_embedding.shape)
       if embedding is None:
         embedding = _embedding
@@ -91,4 +103,3 @@ class FaceModel:
         embedding += _embedding
     embedding = sklearn.preprocessing.normalize(embedding).flatten()
     return embedding
-

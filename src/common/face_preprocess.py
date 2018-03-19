@@ -31,10 +31,10 @@ def parse_lst_line(line):
 def read_image(img_path, **kwargs):
   mode = kwargs.get('mode', 'rgb')
   layout = kwargs.get('layout', 'HWC')
-  if mode=='gray':
-    img = cv2.imread(img_path, cv2.CV_LOAD_IMAGE_GRAYSCALE)
+  if mode!='gray':
+    img = cv2.imread(img_path, cv2.IMREAD_COLOR)
   else:
-    img = cv2.imread(img_path, cv2.CV_LOAD_IMAGE_COLOR)
+    img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
     if mode=='rgb':
       #print('to rgb')
       img = img[...,::-1]
@@ -91,7 +91,7 @@ def preprocess(img, bbox=None, landmark=None, **kwargs):
     ret = img[bb[1]:bb[3],bb[0]:bb[2],:]
     if len(image_size)>0:
       ret = cv2.resize(ret, (image_size[1], image_size[0]))
-    return ret 
+    return ret
   else: #do align using landmark
     assert len(image_size)==2
 
@@ -109,5 +109,3 @@ def preprocess(img, bbox=None, landmark=None, **kwargs):
     #tform3.estimate(src, dst)
     #warped = trans.warp(img, tform3, output_shape=_shape)
     return warped
-
-

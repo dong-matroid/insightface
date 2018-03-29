@@ -60,10 +60,10 @@ class FaceImageIter(io.DataIter):
                  shuffle=False, aug_list=None, mean = None,
                  rand_mirror = False, cutoff = 0,
                  c2c_threshold = 0.0, output_c2c = 0, c2c_mode = -10,
-                 ctx_num = 0, images_per_identity = 0, data_extra = None, hard_mining = False, 
+                 ctx_num = 0, images_per_identity = 0, data_extra = None, hard_mining = False,
                  triplet_params = None, coco_mode = False,
                  mx_model = None,
-                 data_name='data', label_name='softmax_label', **kwargs):
+                 data_name='data', label_name='softmax_label', rand_crop=0, rand_crop_margin=0, **kwargs):
         super(FaceImageIter, self).__init__()
         assert path_imgrec
         if path_imgrec:
@@ -213,7 +213,7 @@ class FaceImageIter(io.DataIter):
         self.cutoff = cutoff
         #self.cast_aug = mx.image.CastAug()
         #self.color_aug = mx.image.ColorJitterAug(0.4, 0.4, 0.4)
-        self.ctx_num = ctx_num 
+        self.ctx_num = ctx_num
         self.c2c_threshold = c2c_threshold
         self.output_c2c = output_c2c
         self.per_batch_size = int(self.batch_size/self.ctx_num)
@@ -264,6 +264,8 @@ class FaceImageIter(io.DataIter):
         self.nbatch = 0
         self.is_init = False
         self.times = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        self.rand_crop = rand_crop
+        self.rand_crop_margin = rand_crop_margin
         #self.reset()
 
 
@@ -277,7 +279,7 @@ class FaceImageIter(io.DataIter):
                       for i in range(nrof_threads)]
       for p in processes:
           p.start()
-      
+
       # VGG Face: Choosing good triplets is crucial and should strike a balance between
       #  selecting informative (i.e. challenging) examples and swamping training with examples that
       #  are too hard. This is achieve by extending each pair (a, p) to a triplet (a, p, n) by sampling
@@ -388,7 +390,7 @@ class FaceImageIter(io.DataIter):
       emb_start_idx = 0
       triplets = []
       people_per_batch = len(nrof_images_per_class)
-      
+
       for i in xrange(people_per_batch):
           nrof_images = int(nrof_images_per_class[i])
           if nrof_images<2:
@@ -532,7 +534,7 @@ class FaceImageIter(io.DataIter):
             nrof_images_per_class[-1]+=1
           else:
             nrof_images_per_class.append(1)
-          
+
         triplets = self.pick_triplets(embeddings, nrof_images_per_class) # shape=(T,3)
         print('found triplets', len(triplets))
         ba = 0
@@ -645,7 +647,7 @@ class FaceImageIter(io.DataIter):
       self.select_triplets()
       for identity,v in self.id2range.iteritems():
         _list = range(*v)
-      
+
         for idx in _list:
           s = imgrec.read_idx(idx)
           ocontents.append(s)
@@ -824,6 +826,66 @@ class FaceImageIter(io.DataIter):
           img[:,:,c] = np.fliplr(img[:,:,c])
       return img
 
+    def augment_img(self, _data):
+      # random shift
+      # random scale
+      # crop a small one, randomly scale it, randomly put it somewhere
+      h, w = _data.shape[:2]
+      if self.rand_crop > 0 and random.random() < self.rand_crop:
+        x0 = 0
+        y0 = 0
+        margin = int(self.rand_crop_margin * max(h, w))
+        if random.random() < self.rand_crop:
+          x0 = random.randint(0, margin)
+          y0 = random.randint(0, margin)
+        nw = w - x0
+        nh = h - y0
+        if random.random() < self.rand_crop:
+          nw -= random.randint(0, margin)
+          nh -= random.randint(0, margin)
+        choice = random.randint(0, 4)
+        #print('choice', choice, 'x0', x0, 'y0', y0, 'nw', nw, 'nh', nh, 'w', w, 'h', h)
+        if nw == w and nh == h:
+          pass
+        elif choice == 0:  # scale
+          _data = mx.img.fixed_crop(_data, x0, y0, nw, nh, (w, h), 2)
+        elif choice == 1: # top left
+          _data[0:nh, 0:nw, :] = _data[y0:(y0+nh), x0:(x0+nw), :]
+          if nh < h: _data[nh:h, 0:w, :]= 127
+          if nw < w: _data[0:h, nw:w, :]= 127
+        elif choice == 2: # top right
+          _data[0:nh, (w-nw):w, :] = _data[y0:(y0+nh), x0:(x0+nw), :]
+          if nh < h: _data[nh:h, 0:w, :]= 127
+          if nw < w: _data[0:h, 0:(w-nw), :]= 127
+        elif choice == 3: # bottom left
+          _data[(h-nh):h, 0:nw, :] = _data[y0:(y0+nh), x0:(x0+nw), :]
+          if nh < h: _data[0:(h-nh), 0:w, :]= 127
+          if nw < w: _data[0:h, nw:w, :]= 127
+        else: # bottom right
+          _data[(h-nh):h, (w-nw):w, :] = _data[y0:(y0+nh), x0:(x0+nw), :]
+          if nh < h: _data[0:(h-nh), 0:w, :]= 127
+          if nw < w: _data[0:h, 0:(w-nw), :]= 127
+
+      if self.rand_mirror:
+        _rd = random.randint(0,1)
+        if _rd==1:
+          _data = mx.ndarray.flip(data=_data, axis=1)
+      if self.nd_mean is not None:
+          _data = _data.astype('float32')
+          _data -= self.nd_mean
+          _data *= 0.0078125
+      if self.cutoff>0:
+        centerh = random.randint(0, _data.shape[0]-1)
+        centerw = random.randint(0, _data.shape[1]-1)
+        half = self.cutoff//2
+        starth = max(0, centerh-half)
+        endh = min(_data.shape[0], centerh+half)
+        startw = max(0, centerw-half)
+        endw = min(_data.shape[1], centerw+half)
+        _data = _data.astype('float32')
+        #print(starth, endh, startw, endw, _data.shape)
+        _data[starth:endh, startw:endw, :] = 127.5
+      return _data
 
     def next(self):
         if not self.is_init:
@@ -842,25 +904,7 @@ class FaceImageIter(io.DataIter):
             while i < batch_size:
                 label, s, bbox, landmark = self.next_sample()
                 _data = self.imdecode(s)
-                if self.rand_mirror:
-                  _rd = random.randint(0,1)
-                  if _rd==1:
-                    _data = mx.ndarray.flip(data=_data, axis=1)
-                if self.nd_mean is not None:
-                    _data = _data.astype('float32')
-                    _data -= self.nd_mean
-                    _data *= 0.0078125
-                if self.cutoff>0:
-                  centerh = random.randint(0, _data.shape[0]-1)
-                  centerw = random.randint(0, _data.shape[1]-1)
-                  half = self.cutoff//2
-                  starth = max(0, centerh-half)
-                  endh = min(_data.shape[0], centerh+half)
-                  startw = max(0, centerw-half)
-                  endw = min(_data.shape[1], centerw+half)
-                  _data = _data.astype('float32')
-                  #print(starth, endh, startw, endw, _data.shape)
-                  _data[starth:endh, startw:endw, :] = 127.5
+                _data = self.augment_img(_data)
                 #_npdata = _data.asnumpy()
                 #if landmark is not None:
                 #  _npdata = face_preprocess.preprocess(_npdata, bbox = bbox, landmark=landmark, image_size=self.image_size)
@@ -982,5 +1026,3 @@ class FaceImageIterList(io.DataIter):
         self.cur_iter.reset()
         continue
       return ret
-
-

@@ -179,6 +179,10 @@ def parse_args():
   parser.add_argument('--rand-mirror', type=int, default=1,
       help='')
   parser.add_argument('--cutoff', type=int, default=0, help='')
+  parser.add_argument('--rand-crop', type=float, default=0.0,
+      help='')
+  parser.add_argument('--rand-crop-margin', type=float, default=0.0,
+      help='')
   parser.add_argument('--patch', type=str, default='0_0_96_112_0',
       help='')
   parser.add_argument('--lr-steps', type=str, default='', help='')
@@ -858,6 +862,8 @@ def train_net(args):
           coco_mode            = coco_mode,
           mx_model             = model,
           label_name           = label_name,
+          rand_crop = args.rand_crop,
+          rand_crop_margin = args.rand_crop_margin,
       )
     else:
       iter_list = []
@@ -882,6 +888,8 @@ def train_net(args):
             coco_mode            = coco_mode,
             mx_model             = model,
             label_name           = label_name,
+            rand_crop = args.rand_crop,
+            rand_crop_margin = args.rand_crop_margin,
         )
         iter_list.append(_dataiter)
       iter_list.append(_dataiter)
